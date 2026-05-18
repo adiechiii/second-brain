@@ -1,3 +1,4 @@
+from app.api.schemas.common import HealthResponse
 """Health-check route."""
 
 from collections.abc import Generator
@@ -24,12 +25,12 @@ def get_health_db_session() -> Generator[Session, None, None]:
         ) from exc
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 def health_check() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/db")
+@router.get("/health/db", response_model=HealthResponse)
 def database_health_check(
     session: Annotated[Session, Depends(get_health_db_session)],
 ) -> dict[str, str]:
