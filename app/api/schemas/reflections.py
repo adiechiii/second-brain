@@ -1,0 +1,26 @@
+"""Reflection API schemas."""
+
+from uuid import UUID
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class ReflectionRequest(BaseModel):
+    query: str | None = None
+    memory_ids: list[UUID] | None = None
+    limit: int = Field(default=10, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def validate_input(self):
+        has_query = bool(self.query and self.query.strip())
+        has_ids = bool(self.memory_ids)
+        if has_query == has_ids:
+            raise ValueError("Provide exactly one of query or memory_ids")
+        return self
+
+
+class ReflectionResponse(BaseModel):
+    summary: str
+    themes: list[str]
+    insights: list[str]
+    questions: list[str]
