@@ -1,38 +1,18 @@
 """Database health endpoint tests."""
 
-import pytest
-
-from app.core.config import get_settings
-from app.api.routes.health import get_health_db_session
+from app.core.config import get_settings, normalize_database_url
 
 
-class FakeSession:
-    def __init__(self):
-        self.closed = False
-
-    def execute(self, statement):
-        assert str(statement) == "SELECT 1"
-
-    def close(self):
-        self.closed = True
-
-
-def test_database_health_returns_ok(client):
-    fake_session = FakeSession()
-
-    def override_db_session():
-        try:
-            yield fake_session
-        finally:
-            fake_session.close()
-
-    client.app.dependency_overrides[get_health_db_session] = override_db_session
+def test_database_health_returns_ok(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.api.routes.health.verify_database_connection",
+        lambda: None,
+    )
 
     response = client.get("/health/db")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    assert fake_session.closed is True
 
 
 def test_database_url_loads_from_environment(monkeypatch):
@@ -45,6 +25,36 @@ def test_database_url_loads_from_environment(monkeypatch):
     assert get_settings().database_url == (
         "postgresql+psycopg://postgres:postgres@localhost:5432/second_brain"
     )
+
+    get_settings.cache_clear()
+
+
+def test_database_url_normalizes_render_postgres_url():
+    assert normalize_database_url("postgres://user:pass@host/db") == (
+        "postgresql+psycopg://user:pass@host/db"
+    )
+
+
+def test_database_url_normalizes_postgresql_url_to_psycopg():
+    assert normalize_database_url("postgresql://user:pass@host/db") == (
+        "postgresql+psycopg://user:pass@host/db"
+    )
+
+
+def test_auto_create_tables_loads_from_environment(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("AUTO_CREATE_TABLES", "true")
+
+    assert get_settings().auto_create_tables is True
+
+    get_settings.cache_clear()
+
+
+def test_debug_errors_loads_from_environment(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("DEBUG_ERRORS", "true")
+
+    assert get_settings().debug_errors is True
 
     get_settings.cache_clear()
 
