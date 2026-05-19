@@ -253,3 +253,24 @@ def test_no_memories_returns_grounded_empty_reflection():
         "insights": [],
         "questions": ["Which memories should be retrieved before reflecting?"],
     }
+
+def test_low_signal_theme_terms_are_filtered():
+    memories = [
+        build_memory(
+            "Second Brain debug error test after deploy.",
+            ["second", "brain", "debug", "test", "database"],
+            topic="after",
+        ),
+        build_memory(
+            "Second Brain local traceback test.",
+            ["second", "brain", "traceback", "test", "database"],
+            topic="debug",
+        ),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["themes"] == ["database"]
+    assert reflection["insights"] == [
+        "A recurring signal around 'database' appears across 2 retrieved memories."
+    ]

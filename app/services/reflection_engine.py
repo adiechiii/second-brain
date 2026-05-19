@@ -72,6 +72,27 @@ LOW_SIGNAL_MEMORY_TEXTS = {
     "no",
 }
 
+LOW_SIGNAL_THEME_TERMS = {
+    "after",
+    "before",
+    "brain",
+    "debug",
+    "error",
+    "fake",
+    "key",
+    "local",
+    "second",
+    "test",
+    "traceback",
+}
+
+
+def _is_useful_theme(theme: str) -> bool:
+    normalized = theme.strip().lower()
+    if not normalized:
+        return False
+    return normalized not in LOW_SIGNAL_THEME_TERMS
+
 
 def _is_high_signal_memory(memory: Memory) -> bool:
     summary = _memory_summary(memory)
@@ -85,7 +106,7 @@ def _normalized_tags(memory: Memory) -> list[str]:
     return [
         tag.strip().lower()
         for tag in tags
-        if isinstance(tag, str) and tag.strip()
+        if isinstance(tag, str) and _is_useful_theme(tag)
     ]
 
 
@@ -93,7 +114,9 @@ def _normalized_topic(memory: Memory) -> str | None:
     if not isinstance(memory.topic, str):
         return None
     topic = memory.topic.strip().lower()
-    return topic or None
+    if not _is_useful_theme(topic):
+        return None
+    return topic
 
 
 def _safe_importance(memory: Memory) -> float:
