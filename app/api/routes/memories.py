@@ -9,14 +9,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.schemas.memories import (
+    CompressionMemoryResponse,
     CreateMemoryRequest,
     CreateMemoryResponse,
+    DailyCompressionRequest,
     MemoryResponse,
     SearchMemoriesResponse,
+    WeeklyCompressionRequest,
 )
 from app.core.config import get_settings
 from app.infrastructure.session import get_db_session
 from app.models.memory import Memory
+from app.services.memory_compression import MemoryCompressionError
+from app.services.memory_compression_service import MemoryCompressionService
 from app.repositories.memory_repository import MemoryRepository
 from app.services.memory_ingestion import MemoryIngestionError
 from app.services.memory_service import MemoryNotFoundError, MemoryService
@@ -31,6 +36,12 @@ def get_memory_service(
     return MemoryService(MemoryRepository(session))
 
 
+def get_memory_compression_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> MemoryCompressionService:
+    return MemoryCompressionService(MemoryRepository(session))
+
+
 def to_memory_response(memory: Memory) -> MemoryResponse:
     return MemoryResponse(
         id=memory.id,
@@ -42,6 +53,15 @@ def to_memory_response(memory: Memory) -> MemoryResponse:
         importance_score=memory.importance_score,
         processing_state=memory.processing_state.value,
         record_state=memory.record_state.value,
+    )
+
+
+def to_compression_response(memory: Memory) -> CompressionMemoryResponse:
+    return CompressionMemoryResponse(
+        id=memory.id,
+        summary=memory.summary or "",
+        topic=memory.topic,
+        tags=memory.tags,
     )
 
 
@@ -80,6 +100,48 @@ def create_memory(
         return handle_unexpected_memory_error(exc)
 
     return CreateMemoryResponse(id=memory.id, summary=memory.summary)
+
+
+@router.post("/compressions/daily", response_model=CompressionMemoryResponse)
+def create_daily_compression(
+    request: DailyCompressionRequest,
+    service: Annotated[
+        MemoryCompressionService,
+        Depends(get_memory_compression_service),
+    ],
+) -> CompressionMemoryResponse:
+    try:
+        memory = service.create_daily_summary(request.day)
+    except MemoryCompressionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        return handle_unexpected_memory_error(exc)
+
+    return to_compression_response(memory)
+
+
+@router.post("/compressions/weekly", response_model=CompressionMemoryResponse)
+def create_weekly_compression(
+    request: WeeklyCompressionRequest,
+    service: Annotated[
+        MemoryCompressionService,
+        Depends(get_memory_compression_service),
+    ],
+) -> CompressionMemoryResponse:
+    try:
+        memory = service.create_weekly_summary(request.week_start)
+    except MemoryCompressionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        return handle_unexpected_memory_error(exc)
+
+    return to_compression_response(memory)
 
 
 @router.get("/search", response_model=SearchMemoriesResponse)
