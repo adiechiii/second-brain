@@ -86,6 +86,13 @@ LOW_SIGNAL_THEME_TERMS = {
     "traceback",
 }
 
+LOW_SIGNAL_MEMORY_MARKERS = (
+    "debug error test",
+    "fake openai key test",
+    "local traceback test",
+    "test after deploy",
+)
+
 
 def _is_useful_theme(theme: str) -> bool:
     normalized = theme.strip().lower()
@@ -96,9 +103,12 @@ def _is_useful_theme(theme: str) -> bool:
 
 def _is_high_signal_memory(memory: Memory) -> bool:
     summary = _memory_summary(memory)
+    normalized = _normalized_summary_text(summary)
     if len(summary) < 40:
         return False
-    return _normalized_summary_text(summary) not in LOW_SIGNAL_MEMORY_TEXTS
+    if normalized in LOW_SIGNAL_MEMORY_TEXTS:
+        return False
+    return not any(marker in normalized for marker in LOW_SIGNAL_MEMORY_MARKERS)
 
 
 def _normalized_tags(memory: Memory) -> list[str]:

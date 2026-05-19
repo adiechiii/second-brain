@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from app.models.memory import Memory, ProcessingState, RecordState
-from app.services.reflection_engine import generate_reflection
+from app.services.reflection_engine import _is_high_signal_memory, generate_reflection
 
 
 def build_memory(
@@ -274,3 +274,19 @@ def test_low_signal_theme_terms_are_filtered():
     assert reflection["insights"] == [
         "A recurring signal around 'database' appears across 2 retrieved memories."
     ]
+
+def test_debug_test_memories_are_not_high_signal():
+    memories = [
+        build_memory(
+            "Second Brain debug error test after deploy.",
+            ["deploy"],
+            topic="debug",
+        ),
+        build_memory(
+            "Second Brain fake OpenAI key test.",
+            ["openai"],
+            topic="test",
+        ),
+    ]
+
+    assert all(not _is_high_signal_memory(memory) for memory in memories)
