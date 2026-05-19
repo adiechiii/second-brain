@@ -177,6 +177,74 @@ def test_unsafe_grounded_ai_output_uses_deterministic_fallback_values(monkeypatc
     assert reflection["questions"] == deterministic["questions"]
 
 
+def test_ai_prompt_includes_at_most_ten_memory_entries(monkeypatch):
+    enable_openai_reflections(monkeypatch)
+    memories = [
+        build_memory(f"Memory {index}", ["database"], topic="notes")
+        for index in range(1, 13)
+    ]
+    captured = {}
+
+    def fake_completion(prompt: str) -> str:
+        captured["prompt"] = prompt
+        return """
+        {
+          "summary": "Database reflection.",
+          "themes": ["database"],
+          "insights": ["database appears across the retrieved memories."],
+          "questions": ["What database note needs review?"]
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.services.reflection_engine.generate_completion",
+        fake_completion,
+    )
+
+    generate_reflection_with_ai(memories)
+
+    prompt = captured["prompt"]
+    memory_lines = prompt.split("\n\nDeterministic baseline JSON:")[0]
+    assert "10. summary:" in memory_lines
+    assert "11. summary:" not in memory_lines
+    assert "Memory 10" in memory_lines
+    assert "Memory 11" not in memory_lines
+
+
+def test_ai_prompt_truncates_long_memory_summary(monkeypatch):
+    enable_openai_reflections(monkeypatch)
+    long_summary = "database " * 80
+    memories = [
+        build_memory(long_summary, ["database"], topic="architecture"),
+    ]
+    captured = {}
+
+    def fake_completion(prompt: str) -> str:
+        captured["prompt"] = prompt
+        return """
+        {
+          "summary": "Database reflection.",
+          "themes": ["database"],
+          "insights": ["database appears across the retrieved memories."],
+          "questions": ["What database note needs review?"]
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.services.reflection_engine.generate_completion",
+        fake_completion,
+    )
+
+    generate_reflection_with_ai(memories)
+
+    prompt = captured["prompt"]
+    memory_section = prompt.split("\n\nDeterministic baseline JSON:")[0]
+    assert long_summary.strip() not in memory_section
+    assert "..." in memory_section
+    assert "tags: database" in memory_section
+    assert "topic: architecture" in memory_section
+
+
 def test_ai_reflection_does_not_leak_prompt(monkeypatch):
     enable_openai_reflections(monkeypatch)
     memories = [

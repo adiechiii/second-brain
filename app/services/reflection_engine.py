@@ -16,6 +16,8 @@ from app.models.memory import Memory
 MAX_SUMMARY_MEMORIES = 3
 MAX_THEMES = 5
 MAX_INSIGHTS = 5
+MAX_AI_PROMPT_MEMORIES = 10
+MAX_AI_MEMORY_SUMMARY_CHARS = 300
 RESPONSE_KEYS = ("summary", "themes", "insights", "questions")
 UNSAFE_AI_OUTPUT_TERMS = (
     "personality",
@@ -45,6 +47,18 @@ def _memory_summary(memory: Memory) -> str:
 
 def _normalized_summary_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
+
+
+def _truncate_ai_text(
+    text: str,
+    max_chars: int = MAX_AI_MEMORY_SUMMARY_CHARS,
+) -> str:
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if len(normalized) <= max_chars:
+        return normalized
+    if max_chars <= 3:
+        return normalized[:max_chars]
+    return normalized[: max_chars - 3].rstrip() + "..."
 
 
 def _normalized_tags(memory: Memory) -> list[str]:
@@ -221,8 +235,8 @@ def generate_reflection(memories: list[Memory]) -> dict:
 
 def _build_ai_prompt(memories: list[Memory], deterministic: dict) -> str:
     memory_lines = []
-    for index, memory in enumerate(memories, start=1):
-        summary = _memory_summary(memory) or "No summary available."
+    for index, memory in enumerate(memories[:MAX_AI_PROMPT_MEMORIES], start=1):
+        summary = _truncate_ai_text(_memory_summary(memory)) or "No summary available."
         tags = ", ".join(_normalized_tags(memory)) or "none"
         topic = _normalized_topic(memory) or "none"
         memory_lines.append(
