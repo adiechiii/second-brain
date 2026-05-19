@@ -22,11 +22,15 @@ def _memory_summary(memory: Memory) -> str:
 
 def _normalized_tags(memory: Memory) -> list[str]:
     tags = memory.tags or []
-    return [str(tag).strip().lower() for tag in tags if str(tag).strip()]
+    return [
+        tag.strip().lower()
+        for tag in tags
+        if isinstance(tag, str) and tag.strip()
+    ]
 
 
 def _normalized_topic(memory: Memory) -> str | None:
-    if not memory.topic:
+    if not isinstance(memory.topic, str):
         return None
     topic = memory.topic.strip().lower()
     return topic or None
@@ -41,9 +45,28 @@ def _top_summaries(memories: list[Memory]) -> list[str]:
     return [summary for memory in ranked[:MAX_SUMMARY_MEMORIES] if (summary := _memory_summary(memory))]
 
 
+def _memory_themes(memory: Memory) -> set[str]:
+    themes = set(_normalized_tags(memory))
+    if topic := _normalized_topic(memory):
+        themes.add(topic)
+    return themes
+
+
+def _theme_counts(memories: list[Memory]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for memory in memories:
+        counts.update(_memory_themes(memory))
+    return counts
+
+
 def _top_themes(memories: list[Memory]) -> list[str]:
-    tag_counts = Counter(tag for memory in memories for tag in _normalized_tags(memory))
-    return [theme for theme, _ in tag_counts.most_common(MAX_THEMES)]
+    counts = _theme_counts(memories)
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [theme for theme, _ in ranked[:MAX_THEMES]]
+
+
+def _evidence_count(theme: str, memories: list[Memory]) -> int:
+    return sum(1 for memory in memories if theme in _memory_themes(memory))
 
 
 def _grounding_terms(memories: list[Memory], deterministic: dict) -> set[str]:
@@ -56,31 +79,44 @@ def _grounding_terms(memories: list[Memory], deterministic: dict) -> set[str]:
 
 
 def _build_insights(memories: list[Memory], themes: list[str]) -> list[str]:
+    if not themes:
+        return [
+            "Retrieved memories do not share tags or topics, so there is not enough evidence for a named pattern."
+        ]
+
     insights: list[str] = []
-    tag_counts = Counter(tag for memory in memories for tag in _normalized_tags(memory))
-    topic_counts = Counter(
-        topic for memory in memories if (topic := _normalized_topic(memory))
-    )
-
-    for tag in themes:
-        count = tag_counts[tag]
+    for theme in themes:
+        count = _evidence_count(theme, memories)
         if count > 1:
-            insights.append(f"'{tag}' appears in {count} retrieved memories.")
+            insights.append(f"'{theme}' is supported by {count} retrieved memories.")
+        elif count == 1:
+            insights.append(
+                f"'{theme}' appears in one retrieved memory, so treat it as a lead rather than a pattern."
+            )
         if len(insights) == MAX_INSIGHTS:
-            return insights
-
-    for topic, count in topic_counts.most_common(MAX_INSIGHTS - len(insights)):
-        if count > 1:
-            insights.append(f"The topic '{topic}' appears in {count} retrieved memories.")
+            break
 
     return insights
 
 
-def _build_questions(themes: list[str], memory_count: int) -> list[str]:
+def _build_questions(themes: list[str], memories: list[Memory]) -> list[str]:
+    memory_count = len(memories)
     if memory_count < 2:
         return ["What additional memories would help confirm whether this pattern matters?"]
 
-    return [f"What would make '{theme}' easier to act on next?" for theme in themes[:3]]
+    if not themes:
+        return ["What additional note would clarify whether these retrieved memories share a theme?"]
+
+    questions = []
+    for theme in themes[:3]:
+        count = _evidence_count(theme, memories)
+        if count > 1:
+            questions.append(
+                f"Which retrieved memory best supports the next step for '{theme}'?"
+            )
+        else:
+            questions.append(f"What additional note would clarify '{theme}'?")
+    return questions
 
 
 def generate_reflection(memories: list[Memory]) -> dict:
@@ -95,7 +131,7 @@ def generate_reflection(memories: list[Memory]) -> dict:
     summaries = _top_summaries(memories)
     themes = _top_themes(memories)
     insights = _build_insights(memories, themes)
-    questions = _build_questions(themes, len(memories))
+    questions = _build_questions(themes, memories)
 
     if len(memories) < 2:
         summary = "Only one retrieved memory is available: "

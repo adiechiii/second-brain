@@ -6,8 +6,8 @@ from app.services.reflection_engine import generate_reflection
 
 def build_memory(
     summary: str,
-    tags: list[str],
-    topic: str | None = None,
+    tags,
+    topic=None,
     importance_score: float | None = None,
 ) -> Memory:
     return Memory(
@@ -43,13 +43,19 @@ def test_multiple_memories_extract_themes():
     assert reflection["summary"] == (
         "Reviewed database schema decisions. | Captured database indexing tradeoffs."
     )
-    assert reflection["themes"][0] == "database"
-    assert "'database' appears in 2 retrieved memories." in reflection["insights"]
-    assert "The topic 'architecture' appears in 2 retrieved memories." in reflection["insights"]
+    assert reflection["themes"] == [
+        "architecture",
+        "database",
+        "indexing",
+        "planning",
+        "schema",
+    ]
+    assert "'architecture' is supported by 2 retrieved memories." in reflection["insights"]
+    assert "'database' is supported by 2 retrieved memories." in reflection["insights"]
     assert reflection["questions"] == [
-        "What would make 'database' easier to act on next?",
-        "What would make 'schema' easier to act on next?",
-        "What would make 'planning' easier to act on next?",
+        "Which retrieved memory best supports the next step for 'architecture'?",
+        "Which retrieved memory best supports the next step for 'database'?",
+        "What additional note would clarify 'indexing'?",
     ]
 
 
@@ -63,7 +69,7 @@ def test_single_memory_uses_cautious_output():
     reflection = generate_reflection([memory])
 
     assert reflection["summary"].startswith("Only one retrieved memory is available:")
-    assert reflection["themes"] == ["database"]
+    assert reflection["themes"] == ["architecture", "database"]
     assert reflection["insights"] == [
         "There is not enough retrieved evidence to identify a repeated pattern."
     ]
@@ -90,6 +96,72 @@ def test_reflection_does_not_hallucinate_content():
     assert "relationship" not in combined
     assert "travel" not in combined
     assert "vendor" in combined
+
+
+def test_topic_only_memories_produce_themes():
+    memories = [
+        build_memory("Reviewed schema boundaries.", [], topic="Architecture"),
+        build_memory("Captured service dependencies.", [], topic="Architecture"),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["themes"] == ["architecture"]
+    assert reflection["insights"] == [
+        "'architecture' is supported by 2 retrieved memories."
+    ]
+
+
+def test_tags_and_topics_both_contribute_to_theme_counts():
+    memories = [
+        build_memory("Reviewed database schema decisions.", ["Database"], topic="Architecture"),
+        build_memory("Captured database indexing tradeoffs.", ["database"], topic="Operations"),
+        build_memory("Documented service boundary notes.", ["services"], topic="architecture"),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["themes"][:2] == ["architecture", "database"]
+    assert "'architecture' is supported by 2 retrieved memories." in reflection["insights"]
+    assert "'database' is supported by 2 retrieved memories." in reflection["insights"]
+
+
+def test_insights_include_evidence_counts_for_single_theme_leads():
+    memories = [
+        build_memory("Reviewed database schema decisions.", ["database"]),
+        build_memory("Captured indexing tradeoffs.", ["indexing"]),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert (
+        "'database' appears in one retrieved memory, so treat it as a lead rather than a pattern."
+        in reflection["insights"]
+    )
+
+
+def test_empty_or_non_string_tags_and_topics_are_ignored():
+    memories = [
+        build_memory("Reviewed database schema decisions.", ["database", "", None, 7], topic=12),
+        build_memory("Captured database indexing tradeoffs.", ["database"], topic=""),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["themes"] == ["database"]
+    assert reflection["insights"] == ["'database' is supported by 2 retrieved memories."]
+
+
+def test_reflection_output_schema_is_unchanged():
+    reflection = generate_reflection([
+        build_memory("Reviewed database schema decisions.", ["database"]),
+    ])
+
+    assert set(reflection) == {"summary", "themes", "insights", "questions"}
+    assert isinstance(reflection["summary"], str)
+    assert isinstance(reflection["themes"], list)
+    assert isinstance(reflection["insights"], list)
+    assert isinstance(reflection["questions"], list)
 
 
 def test_no_memories_returns_grounded_empty_reflection():
