@@ -14,6 +14,11 @@ from app.infrastructure.llm_client import generate_completion
 from app.models.memory import Memory
 from app.services.behavior_loops import detect_behavior_loops
 from app.services.belief_consolidation import convert_patterns_to_beliefs
+from app.services.decision_evaluation import (
+    decision_grouping_keys,
+    detect_decision_mismatch_patterns,
+    get_decision_accuracy_patterns,
+)
 from app.services.decision_patterns import detect_decision_patterns
 from app.services.tension_detection import detect_tensions
 
@@ -359,6 +364,105 @@ def _cognitive_leverage_payload(memories: list[Memory]) -> dict:
     }
 
 
+def _risk_signals(accuracy: dict, failure_loops: list[dict]) -> list[dict]:
+    signals: list[dict] = []
+    for failure_loop in failure_loops:
+        signals.append(
+            {
+                "type": "repeated_incorrect_decisions",
+                "severity": "high",
+                "reason": "Repeated incorrect outcomes detected for the same decision pattern",
+                "pattern_key": failure_loop["pattern_key"],
+                "incorrect_count": failure_loop["incorrect_count"],
+            }
+        )
+
+    if accuracy.get("trend") == "declining":
+        signals.append(
+            {
+                "type": "declining_decision_accuracy",
+                "severity": "medium",
+                "reason": "Recent evaluated decisions are less accurate than earlier decisions",
+            }
+        )
+
+    return signals
+
+
+def _reinforced_patterns(memories: list[Memory], min_count: int = 2) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for memory in memories:
+        if (
+            getattr(memory, "memory_type", None) != "decision"
+            or getattr(memory, "outcome_evaluation", None) != "correct"
+        ):
+            continue
+
+        for pattern_key in decision_grouping_keys(memory):
+            if pattern_key not in grouped:
+                grouped[pattern_key] = {
+                    "pattern_key": pattern_key,
+                    "decision_ids": [],
+                }
+            memory_id = str(getattr(memory, "id", ""))
+            if memory_id not in grouped[pattern_key]["decision_ids"]:
+                grouped[pattern_key]["decision_ids"].append(memory_id)
+
+    results = []
+    for pattern in grouped.values():
+        correct_count = len(pattern["decision_ids"])
+        if correct_count < min_count:
+            continue
+        results.append(
+            {
+                "pattern_key": pattern["pattern_key"],
+                "correct_count": correct_count,
+                "decision_ids": pattern["decision_ids"],
+                "reason": "Repeated correct decisions share this grouping key",
+            }
+        )
+
+    return sorted(
+        results,
+        key=lambda item: (
+            -item["correct_count"],
+            item["pattern_key"],
+        ),
+    )
+
+
+def _broken_patterns(failure_loops: list[dict]) -> list[dict]:
+    return [
+        {
+            "pattern_key": failure_loop["pattern_key"],
+            "incorrect_count": failure_loop["incorrect_count"],
+            "decision_ids": failure_loop["decision_ids"],
+            "reason": failure_loop["reason"],
+        }
+        for failure_loop in failure_loops
+    ]
+
+
+def _decision_feedback_payload(memories: list[Memory]) -> dict:
+    accuracy = get_decision_accuracy_patterns(memories)
+    failure_loops = detect_decision_mismatch_patterns(memories)
+    return {
+        "accuracy": accuracy,
+        "failure_loops": failure_loops,
+        "risk_signals": _risk_signals(accuracy, failure_loops),
+        "behavior_reinforcement": {
+            "reinforced_patterns": _reinforced_patterns(memories),
+            "broken_patterns": _broken_patterns(failure_loops),
+        },
+    }
+
+
+def _deterministic_extension_payload(memories: list[Memory]) -> dict:
+    payload = _cognitive_leverage_payload(memories)
+    payload["decision_feedback"] = _decision_feedback_payload(memories)
+    return payload
+
+
 def generate_reflection(memories: list[Memory]) -> dict:
     if not memories:
         reflection = {
@@ -367,7 +471,7 @@ def generate_reflection(memories: list[Memory]) -> dict:
             "insights": [],
             "questions": ["Which memories should be retrieved before reflecting?"],
         }
-        reflection.update(_cognitive_leverage_payload(memories))
+        reflection.update(_deterministic_extension_payload(memories))
         return reflection
 
     theme_counts = _theme_counts(memories)
@@ -382,7 +486,7 @@ def generate_reflection(memories: list[Memory]) -> dict:
             "insights": [],
             "questions": ["Which more substantive memories should be retrieved before reflecting?"],
         }
-        reflection.update(_cognitive_leverage_payload(memories))
+        reflection.update(_deterministic_extension_payload(memories))
         return reflection
 
     themes = _top_themes(memories)
@@ -409,7 +513,7 @@ def generate_reflection(memories: list[Memory]) -> dict:
         "insights": insights,
         "questions": questions,
     }
-    reflection.update(_cognitive_leverage_payload(memories))
+    reflection.update(_deterministic_extension_payload(memories))
     return reflection
 
 
@@ -538,6 +642,10 @@ def _validate_ai_reflection(
             "detected_loops": deterministic.get("detected_loops", []),
             "detected_tensions": deterministic.get("detected_tensions", []),
             "grounded_questions": deterministic.get("grounded_questions", []),
+            "decision_feedback": deterministic.get(
+                "decision_feedback",
+                _decision_feedback_payload([]),
+            ),
         }
     )
     return reflection

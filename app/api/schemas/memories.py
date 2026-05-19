@@ -1,6 +1,7 @@
 """Memory API schemas."""
 
-from datetime import date
+from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -24,6 +25,9 @@ class MemoryResponse(BaseModel):
     raw_text: str
     memory_type: str
     decision_data: dict | None
+    actual_outcome: str | None
+    outcome_timestamp: datetime | None
+    outcome_evaluation: str | None
     clean_text: str | None
     summary: str | None
     tags: list[str] | None
@@ -35,6 +39,12 @@ class MemoryResponse(BaseModel):
 
 class SearchMemoriesResponse(BaseModel):
     results: list[MemoryResponse]
+
+
+class DecisionOutcomeRequest(BaseModel):
+    actual_outcome: str = Field(min_length=1)
+    outcome_timestamp: datetime | None = None
+    outcome_evaluation: Literal["correct", "incorrect", "uncertain"] | None = None
 
 
 class DailyCompressionRequest(BaseModel):

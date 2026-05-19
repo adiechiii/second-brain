@@ -247,6 +247,7 @@ def test_reflection_output_schema_is_unchanged():
         "detected_loops",
         "detected_tensions",
         "grounded_questions",
+        "decision_feedback",
     }
     assert isinstance(reflection["summary"], str)
     assert isinstance(reflection["themes"], list)
@@ -257,6 +258,7 @@ def test_reflection_output_schema_is_unchanged():
     assert isinstance(reflection["detected_loops"], list)
     assert isinstance(reflection["detected_tensions"], list)
     assert isinstance(reflection["grounded_questions"], list)
+    assert isinstance(reflection["decision_feedback"], dict)
 
 
 def test_no_memories_returns_grounded_empty_reflection():
@@ -272,6 +274,24 @@ def test_no_memories_returns_grounded_empty_reflection():
         "detected_loops": [],
         "detected_tensions": [],
         "grounded_questions": [],
+        "decision_feedback": {
+            "accuracy": {
+                "total_evaluated": 0,
+                "correct_count": 0,
+                "incorrect_count": 0,
+                "uncertain_count": 0,
+                "accuracy_rate": None,
+                "incorrect_rate": None,
+                "uncertain_rate": None,
+                "trend": "insufficient_data",
+            },
+            "failure_loops": [],
+            "risk_signals": [],
+            "behavior_reinforcement": {
+                "reinforced_patterns": [],
+                "broken_patterns": [],
+            },
+        },
     }
 
 def test_low_signal_theme_terms_are_filtered():
@@ -337,6 +357,24 @@ def test_debug_test_memories_without_repeated_useful_theme_return_cautious_refle
         "detected_loops": [],
         "detected_tensions": [],
         "grounded_questions": [],
+        "decision_feedback": {
+            "accuracy": {
+                "total_evaluated": 0,
+                "correct_count": 0,
+                "incorrect_count": 0,
+                "uncertain_count": 0,
+                "accuracy_rate": None,
+                "incorrect_rate": None,
+                "uncertain_rate": None,
+                "trend": "insufficient_data",
+            },
+            "failure_loops": [],
+            "risk_signals": [],
+            "behavior_reinforcement": {
+                "reinforced_patterns": [],
+                "broken_patterns": [],
+            },
+        },
     }
 
 def test_debug_test_memory_detection_handles_punctuation():

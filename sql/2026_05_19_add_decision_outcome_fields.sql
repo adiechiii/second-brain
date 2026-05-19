@@ -1,0 +1,8 @@
+ALTER TABLE memories
+ADD COLUMN IF NOT EXISTS actual_outcome TEXT;
+
+ALTER TABLE memories
+ADD COLUMN IF NOT EXISTS outcome_timestamp TIMESTAMPTZ;
+
+ALTER TABLE memories
+ADD COLUMN IF NOT EXISTS outcome_evaluation VARCHAR(32);

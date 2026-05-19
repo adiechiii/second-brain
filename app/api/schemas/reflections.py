@@ -31,3 +31,4 @@ class ReflectionResponse(BaseModel):
     detected_loops: list[dict] = Field(default_factory=list)
     detected_tensions: list[dict] = Field(default_factory=list)
     grounded_questions: list[str] = Field(default_factory=list)
+    decision_feedback: dict = Field(default_factory=dict)

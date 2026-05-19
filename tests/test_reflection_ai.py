@@ -86,6 +86,7 @@ def test_ai_reflection_uses_mocked_openai_response(monkeypatch):
         "detected_loops",
         "detected_tensions",
         "grounded_questions",
+        "decision_feedback",
     }
     assert reflection["summary"] == generate_reflection(memories)["summary"]
     assert reflection["themes"] == ["database", "schema"]

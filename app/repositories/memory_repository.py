@@ -39,6 +39,29 @@ class MemoryRepository:
         self.session.refresh(memory)
         return memory
 
+    def update_decision_outcome(
+        self,
+        memory: Memory,
+        actual_outcome: str,
+        outcome_timestamp: datetime,
+        outcome_evaluation: str | None,
+    ) -> Memory:
+        memory.actual_outcome = actual_outcome
+        memory.outcome_timestamp = outcome_timestamp
+        memory.outcome_evaluation = outcome_evaluation
+        return self.save(memory)
+
+    def list_decisions_with_outcomes(self) -> list[Memory]:
+        statement = (
+            select(Memory)
+            .where(Memory.record_state == RecordState.ACTIVE)
+            .where(Memory.memory_type == "decision")
+            .where(Memory.actual_outcome.is_not(None))
+            .order_by(Memory.outcome_timestamp.asc(), Memory.created_at.asc(), Memory.id.asc())
+        )
+
+        return list(self.session.scalars(statement))
+
     def list_active_by_created_at_range(
         self,
         start_at: datetime,

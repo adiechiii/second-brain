@@ -22,6 +22,7 @@ class FakeReflectionService:
             "detected_loops": [],
             "detected_tensions": [],
             "grounded_questions": [],
+            "decision_feedback": {},
         }
 
     def generate_from_query(

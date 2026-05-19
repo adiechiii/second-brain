@@ -1,7 +1,9 @@
 """Memory API route tests."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import uuid4
+
+import pytest
 
 from app.api.routes.memories import get_memory_compression_service, get_memory_service
 from app.main import create_app
@@ -25,6 +27,25 @@ def build_memory(summary: str = "Captured memory summary.") -> Memory:
     )
 
 
+def build_decision_memory() -> Memory:
+    return Memory(
+        id=uuid4(),
+        raw_text="Decision note",
+        memory_type="decision",
+        decision_data={
+            "context": "I need to pick a launch date.",
+            "reasoning": "A smaller release is safer.",
+            "expected_outcome": "Ship earlier with fewer defects.",
+        },
+        clean_text="Decision note",
+        summary="Decision note",
+        tags=["decision"],
+        importance_score=0.7,
+        processing_state=ProcessingState.EMBEDDED,
+        record_state=RecordState.ACTIVE,
+    )
+
+
 class FakeMemoryService:
     def __init__(self):
         self.created_raw_text = None
@@ -35,6 +56,12 @@ class FakeMemoryService:
         self.search_query = None
         self.search_limit = None
         self.memory = build_memory()
+        self.decision_memory = build_decision_memory()
+        self.updated_outcome_id = None
+        self.updated_actual_outcome = None
+        self.updated_outcome_timestamp = None
+        self.updated_outcome_evaluation = None
+        self.update_count = 0
 
     def create_memory(
         self,
@@ -60,6 +87,32 @@ class FakeMemoryService:
         if id != self.memory.id:
             raise MemoryNotFoundError("not found")
         return self.memory
+
+    def update_decision_outcome(
+        self,
+        id,
+        actual_outcome: str,
+        outcome_timestamp=None,
+        outcome_evaluation: str | None = None,
+    ) -> Memory:
+        if id != self.decision_memory.id:
+            raise MemoryNotFoundError("not found")
+        self.update_count += 1
+        self.updated_outcome_id = id
+        self.updated_actual_outcome = actual_outcome
+        self.updated_outcome_timestamp = outcome_timestamp or datetime(
+            2026,
+            5,
+            19,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        )
+        self.updated_outcome_evaluation = outcome_evaluation
+        self.decision_memory.actual_outcome = actual_outcome
+        self.decision_memory.outcome_timestamp = self.updated_outcome_timestamp
+        self.decision_memory.outcome_evaluation = outcome_evaluation
+        return self.decision_memory
 
 
 class FailingMemoryService(FakeMemoryService):
@@ -166,6 +219,101 @@ def test_search_memories_returns_results():
     assert response.json()["results"][0]["id"] == str(service.memory.id)
     assert service.search_query == "memory"
     assert service.search_limit == 3
+
+
+def test_patch_decision_outcome_updates_existing_decision():
+    app = create_app()
+    service = FakeMemoryService()
+    original_decision_data = dict(service.decision_memory.decision_data)
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).patch(
+        f"/memories/{service.decision_memory.id}/outcome",
+        json={
+            "actual_outcome": "The release shipped safely.",
+            "outcome_timestamp": "2026-05-19T12:00:00Z",
+            "outcome_evaluation": "correct",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(service.decision_memory.id)
+    assert body["actual_outcome"] == "The release shipped safely."
+    assert body["outcome_timestamp"] == "2026-05-19T12:00:00Z"
+    assert body["outcome_evaluation"] == "correct"
+    assert body["decision_data"] == original_decision_data
+    assert service.updated_outcome_id == service.decision_memory.id
+    assert service.updated_actual_outcome == "The release shipped safely."
+    assert service.updated_outcome_evaluation == "correct"
+    assert service.update_count == 1
+
+
+def test_patch_decision_outcome_uses_service_timestamp_default():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).patch(
+        f"/memories/{service.decision_memory.id}/outcome",
+        json={
+            "actual_outcome": "The release shipped safely.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["outcome_timestamp"] == "2026-05-19T12:00:00Z"
+    assert service.updated_outcome_timestamp == datetime(
+        2026,
+        5,
+        19,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+
+@pytest.mark.parametrize("evaluation", ["correct", "incorrect", "uncertain"])
+def test_patch_decision_outcome_accepts_valid_evaluations(evaluation):
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).patch(
+        f"/memories/{service.decision_memory.id}/outcome",
+        json={
+            "actual_outcome": "The release shipped safely.",
+            "outcome_evaluation": evaluation,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["outcome_evaluation"] == evaluation
+
+
+def test_patch_decision_outcome_rejects_invalid_evaluation():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).patch(
+        f"/memories/{service.decision_memory.id}/outcome",
+        json={
+            "actual_outcome": "The release shipped safely.",
+            "outcome_evaluation": "maybe",
+        },
+    )
+
+    assert response.status_code == 422
+    assert service.update_count == 0
 
 
 def test_post_daily_compression_returns_compression_response():

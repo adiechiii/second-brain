@@ -83,6 +83,12 @@ class Memory(Base):
         server_default="memory",
     )
     decision_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    actual_outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    outcome_evaluation: Mapped[str | None] = mapped_column(String(32), nullable=True)
     clean_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

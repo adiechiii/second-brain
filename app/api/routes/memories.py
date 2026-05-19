@@ -13,6 +13,7 @@ from app.api.schemas.memories import (
     CreateMemoryRequest,
     CreateMemoryResponse,
     DailyCompressionRequest,
+    DecisionOutcomeRequest,
     MemoryResponse,
     SearchMemoriesResponse,
     WeeklyCompressionRequest,
@@ -24,7 +25,7 @@ from app.services.memory_compression import MemoryCompressionError
 from app.services.memory_compression_service import MemoryCompressionService
 from app.repositories.memory_repository import MemoryRepository
 from app.services.memory_ingestion import MemoryIngestionError
-from app.services.memory_service import MemoryNotFoundError, MemoryService
+from app.services.memory_service import MemoryNotFoundError, MemoryOutcomeError, MemoryService
 
 router = APIRouter(prefix="/memories", tags=["memories"])
 logger = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ def to_memory_response(memory: Memory) -> MemoryResponse:
         raw_text=memory.raw_text,
         memory_type=memory.memory_type,
         decision_data=memory.decision_data,
+        actual_outcome=memory.actual_outcome,
+        outcome_timestamp=memory.outcome_timestamp,
+        outcome_evaluation=memory.outcome_evaluation,
         clean_text=memory.clean_text,
         summary=memory.summary,
         tags=memory.tags,
@@ -165,6 +169,35 @@ def search_memories(
         )
     except Exception as exc:
         return handle_unexpected_memory_error(exc)
+
+
+@router.patch("/{id}/outcome", response_model=MemoryResponse)
+def update_decision_outcome(
+    id: UUID,
+    request: DecisionOutcomeRequest,
+    service: Annotated[MemoryService, Depends(get_memory_service)],
+) -> MemoryResponse:
+    try:
+        memory = service.update_decision_outcome(
+            id,
+            actual_outcome=request.actual_outcome,
+            outcome_timestamp=request.outcome_timestamp,
+            outcome_evaluation=request.outcome_evaluation,
+        )
+    except MemoryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except MemoryOutcomeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        return handle_unexpected_memory_error(exc)
+
+    return to_memory_response(memory)
 
 
 @router.get("/{id}", response_model=MemoryResponse)
