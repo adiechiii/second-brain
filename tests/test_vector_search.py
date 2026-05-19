@@ -8,7 +8,8 @@ from sqlalchemy.dialects import postgresql
 from app.models.memory import Memory, ProcessingState, RecordState
 from app.repositories.memory_repository import MemoryRepository
 from app.services.memory_embedding import embedding_for_text, mock_embedding
-from app.services.vector_search import VectorSearchService, _rerank_memories
+from app.services.memory_ranking import _rerank_memories
+from app.services.vector_search import VectorSearchService
 
 
 def build_memory(clean_text: str, importance_score: float | None = None) -> Memory:
