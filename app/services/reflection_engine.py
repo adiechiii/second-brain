@@ -5,7 +5,9 @@ long-term scheduling, or unsupported claims are used here.
 """
 
 from collections import Counter
+from datetime import datetime, timezone
 import json
+import re
 
 from app.infrastructure.llm_client import generate_completion
 from app.models.memory import Memory
@@ -18,6 +20,10 @@ RESPONSE_KEYS = ("summary", "themes", "insights", "questions")
 
 def _memory_summary(memory: Memory) -> str:
     return (memory.summary or memory.clean_text or "").strip()
+
+
+def _normalized_summary_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip().lower())
 
 
 def _normalized_tags(memory: Memory) -> list[str]:
@@ -36,13 +42,51 @@ def _normalized_topic(memory: Memory) -> str | None:
     return topic or None
 
 
-def _top_summaries(memories: list[Memory]) -> list[str]:
+def _safe_importance(memory: Memory) -> float:
+    try:
+        return float(memory.importance_score or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _recency_sort_value(memory: Memory) -> float:
+    timestamp = memory.updated_at or memory.created_at
+    if not isinstance(timestamp, datetime):
+        return float("-inf")
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+    return timestamp.timestamp()
+
+
+def _summary_theme_coverage(memory: Memory, themes: list[str]) -> int:
+    theme_set = set(themes)
+    return len(_memory_themes(memory) & theme_set)
+
+
+def _top_summaries(memories: list[Memory], themes: list[str]) -> list[str]:
     ranked = sorted(
         memories,
-        key=lambda memory: memory.importance_score or 0.0,
-        reverse=True,
+        key=lambda memory: (
+            -_summary_theme_coverage(memory, themes),
+            -_safe_importance(memory),
+            -_recency_sort_value(memory),
+            _normalized_summary_text(_memory_summary(memory)),
+        ),
     )
-    return [summary for memory in ranked[:MAX_SUMMARY_MEMORIES] if (summary := _memory_summary(memory))]
+    summaries: list[str] = []
+    seen: set[str] = set()
+    for memory in ranked:
+        summary = _memory_summary(memory)
+        normalized = _normalized_summary_text(summary)
+        if not summary or normalized in seen:
+            continue
+        summaries.append(summary)
+        seen.add(normalized)
+        if len(summaries) == MAX_SUMMARY_MEMORIES:
+            break
+    return summaries
 
 
 def _memory_themes(memory: Memory) -> set[str]:
@@ -128,8 +172,8 @@ def generate_reflection(memories: list[Memory]) -> dict:
             "questions": ["Which memories should be retrieved before reflecting?"],
         }
 
-    summaries = _top_summaries(memories)
     themes = _top_themes(memories)
+    summaries = _top_summaries(memories, themes)
     insights = _build_insights(memories, themes)
     questions = _build_questions(themes, memories)
 
@@ -138,8 +182,12 @@ def generate_reflection(memories: list[Memory]) -> dict:
         summary += summaries[0] if summaries else "no summary was available."
         insights = ["There is not enough retrieved evidence to identify a repeated pattern."]
     else:
-        summary = " | ".join(summaries)
-        if not summary:
+        if summaries:
+            summary = (
+                f"Across {len(memories)} retrieved memories, the strongest evidence points to: "
+                + " | ".join(summaries)
+            )
+        else:
             summary = "Retrieved memories did not include summaries to combine."
 
     return {

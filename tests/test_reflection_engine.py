@@ -1,5 +1,7 @@
 """Reflection engine tests."""
 
+from datetime import datetime, timezone
+
 from app.models.memory import Memory, ProcessingState, RecordState
 from app.services.reflection_engine import generate_reflection
 
@@ -9,6 +11,8 @@ def build_memory(
     tags,
     topic=None,
     importance_score: float | None = None,
+    updated_at=None,
+    created_at=None,
 ) -> Memory:
     return Memory(
         raw_text=summary,
@@ -17,6 +21,8 @@ def build_memory(
         tags=tags,
         topic=topic,
         importance_score=importance_score,
+        updated_at=updated_at,
+        created_at=created_at,
         processing_state=ProcessingState.EMBEDDED,
         record_state=RecordState.ACTIVE,
     )
@@ -41,6 +47,7 @@ def test_multiple_memories_extract_themes():
     reflection = generate_reflection(memories)
 
     assert reflection["summary"] == (
+        "Across 2 retrieved memories, the strongest evidence points to: "
         "Reviewed database schema decisions. | Captured database indexing tradeoffs."
     )
     assert reflection["themes"] == [
@@ -96,6 +103,79 @@ def test_reflection_does_not_hallucinate_content():
     assert "relationship" not in combined
     assert "travel" not in combined
     assert "vendor" in combined
+
+
+def test_multi_memory_summary_has_evidence_count_prefix():
+    memories = [
+        build_memory("Reviewed database schema decisions.", ["database"]),
+        build_memory("Captured database indexing tradeoffs.", ["database"]),
+        build_memory("Documented service boundary notes.", ["services"]),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["summary"].startswith(
+        "Across 3 retrieved memories, the strongest evidence points to: "
+    )
+
+
+def test_duplicate_summaries_are_included_once():
+    memories = [
+        build_memory("Reviewed database schema decisions.", ["database"]),
+        build_memory(" reviewed   database schema decisions. ", ["database"]),
+        build_memory("Captured database indexing tradeoffs.", ["database"]),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["summary"].count("Reviewed database schema decisions.") == 1
+    assert "Captured database indexing tradeoffs." in reflection["summary"]
+
+
+def test_summary_selection_prefers_theme_coverage_over_unrelated_importance():
+    memories = [
+        build_memory("Unrelated administrative note.", [], importance_score=1.0),
+        build_memory("Reviewed database schema decisions.", ["database"], importance_score=0.1),
+        build_memory("Captured database indexing tradeoffs.", ["database"], importance_score=0.1),
+        build_memory("Documented database rollback notes.", ["database"], importance_score=0.1),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert "Unrelated administrative note." not in reflection["summary"]
+    assert "Reviewed database schema decisions." in reflection["summary"]
+    assert "Captured database indexing tradeoffs." in reflection["summary"]
+    assert "Documented database rollback notes." in reflection["summary"]
+
+
+def test_summary_selection_uses_updated_at_recency_as_tie_breaker():
+    older = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    memories = [
+        build_memory("Older database note.", ["database"], importance_score=0.5, updated_at=older),
+        build_memory("Newer database note.", ["database"], importance_score=0.5, updated_at=newer),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["summary"].index("Newer database note.") < reflection["summary"].index(
+        "Older database note."
+    )
+
+
+def test_summary_selection_falls_back_to_created_at_for_recency():
+    older = datetime(2026, 1, 1)
+    newer = datetime(2026, 5, 1)
+    memories = [
+        build_memory("Older database note.", ["database"], importance_score=0.5, created_at=older),
+        build_memory("Newer database note.", ["database"], importance_score=0.5, created_at=newer),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection["summary"].index("Newer database note.") < reflection["summary"].index(
+        "Older database note."
+    )
 
 
 def test_topic_only_memories_produce_themes():
