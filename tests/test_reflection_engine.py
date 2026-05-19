@@ -322,3 +322,27 @@ def test_debug_test_memory_detection_handles_punctuation():
     )
 
     assert not _is_high_signal_memory(memory)
+
+def test_generic_action_and_time_terms_are_filtered_from_themes():
+    memories = [
+        build_memory(
+            "Captured compression plan for daily and weekly memory summaries.",
+            ["captured", "compression", "daily", "weekly", "memory"],
+            topic="planned",
+        ),
+        build_memory(
+            "Reviewed database indexing tradeoffs for memory retrieval.",
+            ["reviewed", "database", "memory"],
+            topic="production",
+        ),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert "captured" not in reflection["themes"]
+    assert "daily" not in reflection["themes"]
+    assert "weekly" not in reflection["themes"]
+    assert "planned" not in reflection["themes"]
+    assert "reviewed" not in reflection["themes"]
+    assert "production" not in reflection["themes"]
+    assert "memory" in reflection["themes"]

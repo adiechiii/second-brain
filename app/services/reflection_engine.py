@@ -76,14 +76,21 @@ LOW_SIGNAL_THEME_TERMS = {
     "after",
     "before",
     "brain",
+    "captured",
+    "daily",
     "debug",
     "error",
     "fake",
+    "final",
     "key",
     "local",
+    "planned",
+    "production",
+    "reviewed",
     "second",
     "test",
     "traceback",
+    "weekly",
 }
 
 LOW_SIGNAL_MEMORY_MARKERS = (
