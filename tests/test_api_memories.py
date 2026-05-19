@@ -14,6 +14,8 @@ def build_memory(summary: str = "Captured memory summary.") -> Memory:
     return Memory(
         id=uuid4(),
         raw_text="  Captured memory text.  ",
+        memory_type="memory",
+        decision_data=None,
         clean_text="Captured memory text.",
         summary=summary,
         tags=["memory", "capture"],
@@ -26,12 +28,27 @@ def build_memory(summary: str = "Captured memory summary.") -> Memory:
 class FakeMemoryService:
     def __init__(self):
         self.created_raw_text = None
+        self.created_memory_type = None
+        self.created_context = None
+        self.created_reasoning = None
+        self.created_expected_outcome = None
         self.search_query = None
         self.search_limit = None
         self.memory = build_memory()
 
-    def create_memory(self, raw_text: str) -> Memory:
+    def create_memory(
+        self,
+        raw_text: str | None,
+        memory_type: str = "memory",
+        context: str | None = None,
+        reasoning: str | None = None,
+        expected_outcome: str | None = None,
+    ) -> Memory:
         self.created_raw_text = raw_text
+        self.created_memory_type = memory_type
+        self.created_context = context
+        self.created_reasoning = reasoning
+        self.created_expected_outcome = expected_outcome
         return self.memory
 
     def search_memories(self, query: str, limit: int) -> list[Memory]:
@@ -46,7 +63,14 @@ class FakeMemoryService:
 
 
 class FailingMemoryService(FakeMemoryService):
-    def create_memory(self, raw_text: str) -> Memory:
+    def create_memory(
+        self,
+        raw_text: str | None,
+        memory_type: str = "memory",
+        context: str | None = None,
+        reasoning: str | None = None,
+        expected_outcome: str | None = None,
+    ) -> Memory:
         raise RuntimeError("database exploded")
 
     def search_memories(self, query: str, limit: int) -> list[Memory]:
@@ -102,6 +126,31 @@ def test_post_memories_creates_memory():
         "summary": "Captured memory summary.",
     }
     assert service.created_raw_text == "  hello  "
+
+
+def test_post_decision_memory_creates_structured_decision():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).post(
+        "/memories",
+        json={
+            "memory_type": "decision",
+            "context": "I need to pick a launch date.",
+            "reasoning": "A smaller release is safer.",
+            "expected_outcome": "Ship earlier with fewer defects.",
+        },
+    )
+
+    assert response.status_code == 201
+    assert service.created_raw_text is None
+    assert service.created_memory_type == "decision"
+    assert service.created_context == "I need to pick a launch date."
+    assert service.created_reasoning == "A smaller release is safer."
+    assert service.created_expected_outcome == "Ship earlier with fewer defects."
 
 
 def test_search_memories_returns_results():

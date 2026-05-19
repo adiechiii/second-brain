@@ -46,6 +46,8 @@ def to_memory_response(memory: Memory) -> MemoryResponse:
     return MemoryResponse(
         id=memory.id,
         raw_text=memory.raw_text,
+        memory_type=memory.memory_type,
+        decision_data=memory.decision_data,
         clean_text=memory.clean_text,
         summary=memory.summary,
         tags=memory.tags,
@@ -90,7 +92,13 @@ def create_memory(
     service: Annotated[MemoryService, Depends(get_memory_service)],
 ) -> CreateMemoryResponse:
     try:
-        memory = service.create_memory(request.raw_text)
+        memory = service.create_memory(
+            raw_text=request.raw_text,
+            memory_type=request.memory_type,
+            context=request.context,
+            reasoning=request.reasoning,
+            expected_outcome=request.expected_outcome,
+        )
     except MemoryIngestionError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

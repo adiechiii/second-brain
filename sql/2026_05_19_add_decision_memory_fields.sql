@@ -1,0 +1,5 @@
+ALTER TABLE memories
+ADD COLUMN IF NOT EXISTS memory_type VARCHAR(64) NOT NULL DEFAULT 'memory';
+
+ALTER TABLE memories
+ADD COLUMN IF NOT EXISTS decision_data JSONB;

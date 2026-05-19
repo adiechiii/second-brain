@@ -20,8 +20,21 @@ class MemoryService:
     def __init__(self, repository: MemoryRepository):
         self.repository = repository
 
-    def create_memory(self, raw_text: str) -> Memory:
-        memory = MemoryIngestionService(self.repository).create_memory(raw_text)
+    def create_memory(
+        self,
+        raw_text: str | None,
+        memory_type: str = "memory",
+        context: str | None = None,
+        reasoning: str | None = None,
+        expected_outcome: str | None = None,
+    ) -> Memory:
+        memory = MemoryIngestionService(self.repository).create_memory(
+            raw_text=raw_text,
+            memory_type=memory_type,
+            context=context,
+            reasoning=reasoning,
+            expected_outcome=expected_outcome,
+        )
         enrich_memory(memory)
         embed_memory(memory)
         return self.repository.save(memory)

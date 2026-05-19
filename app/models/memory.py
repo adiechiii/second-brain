@@ -76,6 +76,13 @@ class Memory(Base):
         default=RecordState.ACTIVE,
     )
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    memory_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="memory",
+        server_default="memory",
+    )
+    decision_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     clean_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)

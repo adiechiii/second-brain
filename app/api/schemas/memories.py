@@ -7,7 +7,11 @@ from pydantic import BaseModel, Field
 
 
 class CreateMemoryRequest(BaseModel):
-    raw_text: str = Field(min_length=1)
+    raw_text: str | None = Field(default=None, min_length=1)
+    memory_type: str = "memory"
+    context: str | None = Field(default=None, min_length=1)
+    reasoning: str | None = Field(default=None, min_length=1)
+    expected_outcome: str | None = Field(default=None, min_length=1)
 
 
 class CreateMemoryResponse(BaseModel):
@@ -18,6 +22,8 @@ class CreateMemoryResponse(BaseModel):
 class MemoryResponse(BaseModel):
     id: UUID
     raw_text: str
+    memory_type: str
+    decision_data: dict | None
     clean_text: str | None
     summary: str | None
     tags: list[str] | None
