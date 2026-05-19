@@ -200,20 +200,22 @@ def _build_insights(memories: list[Memory], themes: list[str]) -> list[str]:
 def _build_questions(themes: list[str], memories: list[Memory]) -> list[str]:
     memory_count = len(memories)
     if memory_count < 2:
-        return ["What additional memories would help confirm whether this pattern matters?"]
+        return ["What follow-up memory would show whether this is isolated or recurring?"]
 
     if not themes:
-        return ["What additional note would clarify whether these retrieved memories share a theme?"]
+        return ["What label, topic, or follow-up note would clarify the shared signal here?"]
 
     questions = []
     for theme in themes[:3]:
         count = _evidence_count(theme, memories)
         if count > 1:
             questions.append(
-                f"Which retrieved memory best supports the next step for '{theme}'?"
+                f"What decision, action, or open question keeps recurring around '{theme}'?"
             )
         else:
-            questions.append(f"What additional note would clarify '{theme}'?")
+            questions.append(
+                f"What extra memory would confirm whether '{theme}' is important or just a one-off lead?"
+            )
     return questions
 
 

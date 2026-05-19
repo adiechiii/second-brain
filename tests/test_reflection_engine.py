@@ -60,9 +60,9 @@ def test_multiple_memories_extract_themes():
     assert "'architecture' is supported by 2 retrieved memories." in reflection["insights"]
     assert "'database' is supported by 2 retrieved memories." in reflection["insights"]
     assert reflection["questions"] == [
-        "Which retrieved memory best supports the next step for 'architecture'?",
-        "Which retrieved memory best supports the next step for 'database'?",
-        "What additional note would clarify 'indexing'?",
+        "What decision, action, or open question keeps recurring around 'architecture'?",
+        "What decision, action, or open question keeps recurring around 'database'?",
+        "What extra memory would confirm whether 'indexing' is important or just a one-off lead?",
     ]
 
 
@@ -81,7 +81,7 @@ def test_single_memory_uses_cautious_output():
         "There is not enough retrieved evidence to identify a repeated pattern."
     ]
     assert reflection["questions"] == [
-        "What additional memories would help confirm whether this pattern matters?"
+        "What follow-up memory would show whether this is isolated or recurring?"
     ]
 
 
