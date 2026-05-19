@@ -11,6 +11,7 @@ class FakeReflectionService:
         self.query = None
         self.limit = None
         self.memory_ids = None
+        self.depth = None
         self.reflection = {
             "summary": "Grounded reflection.",
             "themes": ["database"],
@@ -18,13 +19,24 @@ class FakeReflectionService:
             "questions": ["What database decision needs review?"],
         }
 
-    def generate_from_query(self, query: str, limit: int) -> dict:
+    def generate_from_query(
+        self,
+        query: str,
+        limit: int,
+        depth: str = "standard",
+    ) -> dict:
         self.query = query
         self.limit = limit
+        self.depth = depth
         return self.reflection
 
-    def generate_from_ids(self, memory_ids: list) -> dict:
+    def generate_from_ids(
+        self,
+        memory_ids: list,
+        depth: str = "standard",
+    ) -> dict:
         self.memory_ids = memory_ids
+        self.depth = depth
         return self.reflection
 
 
@@ -44,6 +56,7 @@ def test_post_reflections_with_query_returns_reflection():
     assert response.json() == service.reflection
     assert service.query == "database"
     assert service.limit == 2
+    assert service.depth == "standard"
 
 
 def test_post_reflections_with_memory_ids_returns_reflection():
@@ -62,6 +75,7 @@ def test_post_reflections_with_memory_ids_returns_reflection():
     assert response.status_code == 200
     assert response.json() == service.reflection
     assert service.memory_ids == [memory_id]
+    assert service.depth == "standard"
 
 
 def test_post_reflections_requires_query_or_memory_ids():

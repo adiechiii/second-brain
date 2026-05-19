@@ -1,5 +1,6 @@
 """Reflection API schemas."""
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -9,6 +10,7 @@ class ReflectionRequest(BaseModel):
     query: str | None = None
     memory_ids: list[UUID] | None = None
     limit: int = Field(default=10, ge=1, le=50)
+    depth: Literal["quick", "standard", "deep"] = "standard"
 
     @model_validator(mode="after")
     def validate_input(self):

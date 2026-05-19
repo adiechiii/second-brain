@@ -28,9 +28,13 @@ def create_reflection(
 ) -> ReflectionResponse:
     try:
         if request.memory_ids:
-            reflection = service.generate_from_ids(request.memory_ids)
+            reflection = service.generate_from_ids(request.memory_ids, depth=request.depth)
         else:
-            reflection = service.generate_from_query(request.query or "", request.limit)
+            reflection = service.generate_from_query(
+                request.query or "",
+                request.limit,
+                depth=request.depth,
+            )
     except ReflectionInputError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

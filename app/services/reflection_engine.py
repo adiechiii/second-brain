@@ -256,8 +256,29 @@ def generate_reflection(memories: list[Memory]) -> dict:
     }
 
 
-def _build_ai_prompt(memories: list[Memory], deterministic: dict) -> str:
+def _reflection_depth_instruction(depth: str) -> str:
+    if depth == "quick":
+        return (
+            "Depth mode: quick. Keep the reflection very short. "
+            "Prioritize one core signal, up to two themes, one insight, and one question."
+        )
+    if depth == "deep":
+        return (
+            "Depth mode: deep. Look for repeated themes, possible tensions, and useful next questions. "
+            "Stay grounded and cautious; do not add unsupported conclusions."
+        )
+    return (
+        "Depth mode: standard. Provide themes, grounded insights, and useful questions without overexplaining."
+    )
+
+
+def _build_ai_prompt(
+    memories: list[Memory],
+    deterministic: dict,
+    depth: str = "standard",
+) -> str:
     prompt_memories = memories[:MAX_AI_PROMPT_MEMORIES]
+    depth_instruction = _reflection_depth_instruction(depth)
 
     def format_memory_lines(selected_memories: list[Memory]) -> str:
         memory_lines = []
@@ -289,8 +310,9 @@ def _build_ai_prompt(memories: list[Memory], deterministic: dict) -> str:
         "Bad style: 'You are clearly...', 'You always...', 'This proves that...', 'You need to...', 'Your personality is...'.\n"
         "Return only valid JSON with exactly these keys: summary, themes, insights, questions.\n"
         "Each value must match this schema: summary string; themes list of strings; insights list of strings; questions list of strings.\n"
-        "Keep the response concise, grounded, and specific.\n\n"
-        "Retrieved memory context with signal labels:\n"
+        "Keep the response concise, grounded, and specific.\n"
+        + depth_instruction
+        + "\n\nRetrieved memory context with signal labels:\n"
         + format_memory_lines(prompt_memories)
         + "\n\nTreat weak memories as lower-confidence evidence. Use them only if they support a pattern already visible in stronger or repeated context.\n"
         "Generate sharper questions grounded in the actual memory themes.\n\n"
@@ -354,12 +376,15 @@ def _validate_ai_reflection(
     }
 
 
-def generate_reflection_with_ai(memories: list[Memory]) -> dict:
+def generate_reflection_with_ai(
+    memories: list[Memory],
+    depth: str = "standard",
+) -> dict:
     deterministic = generate_reflection(memories)
     if not get_settings().enable_openai_reflections:
         return deterministic
 
-    prompt = _build_ai_prompt(memories, deterministic)
+    prompt = _build_ai_prompt(memories, deterministic, depth=depth)
 
     try:
         response_text = generate_completion(prompt)
