@@ -13,7 +13,9 @@ from app.api.schemas.memories import (
     CreateMemoryRequest,
     CreateMemoryResponse,
     DailyCompressionRequest,
+    DecisionEvaluationSummaryResponse,
     DecisionOutcomeRequest,
+    InterventionWarningResponse,
     MemoryResponse,
     SearchMemoriesResponse,
     WeeklyCompressionRequest,
@@ -88,6 +90,13 @@ def handle_unexpected_memory_error(exc: Exception) -> JSONResponse:
         )
 
     raise exc
+
+
+def to_decision_evaluation_response(summary: dict) -> DecisionEvaluationSummaryResponse:
+    return DecisionEvaluationSummaryResponse(
+        accuracy=summary["accuracy"],
+        failure_loops=summary.get("repeated_incorrect_patterns", []),
+    )
 
 
 @router.post("", response_model=CreateMemoryResponse, status_code=status.HTTP_201_CREATED)
@@ -171,6 +180,21 @@ def search_memories(
         return handle_unexpected_memory_error(exc)
 
 
+@router.get(
+    "/decisions/evaluation",
+    response_model=DecisionEvaluationSummaryResponse,
+)
+def get_decision_evaluation_summary(
+    service: Annotated[MemoryService, Depends(get_memory_service)],
+) -> DecisionEvaluationSummaryResponse:
+    try:
+        return to_decision_evaluation_response(
+            service.get_decision_evaluation_summary(),
+        )
+    except Exception as exc:
+        return handle_unexpected_memory_error(exc)
+
+
 @router.patch("/{id}/outcome", response_model=MemoryResponse)
 def update_decision_outcome(
     id: UUID,
@@ -198,6 +222,32 @@ def update_decision_outcome(
         return handle_unexpected_memory_error(exc)
 
     return to_memory_response(memory)
+
+
+@router.get("/{id}/intervention", response_model=InterventionWarningResponse)
+def get_memory_intervention_warning(
+    id: UUID,
+    service: Annotated[MemoryService, Depends(get_memory_service)],
+) -> InterventionWarningResponse:
+    try:
+        memory = service.get_memory(id)
+        if memory.memory_type != "decision":
+            return InterventionWarningResponse(
+                warning=False,
+                risk_level="none",
+                reason="No repeated negative decision pattern matched",
+                reference_pattern=None,
+            )
+        return InterventionWarningResponse(
+            **service.get_intervention_warning_for_memory(memory),
+        )
+    except MemoryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        return handle_unexpected_memory_error(exc)
 
 
 @router.get("/{id}", response_model=MemoryResponse)

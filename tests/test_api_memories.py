@@ -62,6 +62,27 @@ class FakeMemoryService:
         self.updated_outcome_timestamp = None
         self.updated_outcome_evaluation = None
         self.update_count = 0
+        self.evaluation_summary = {
+            "accuracy": {
+                "total_evaluated": 0,
+                "correct_count": 0,
+                "incorrect_count": 0,
+                "uncertain_count": 0,
+                "accuracy_rate": None,
+                "incorrect_rate": None,
+                "uncertain_rate": None,
+                "trend": "insufficient_data",
+            },
+            "repeated_incorrect_patterns": [],
+        }
+        self.intervention_warning = {
+            "warning": False,
+            "risk_level": "none",
+            "reason": "No repeated negative decision pattern matched",
+            "reference_pattern": None,
+        }
+        self.evaluation_call_count = 0
+        self.intervention_memory = None
 
     def create_memory(
         self,
@@ -84,9 +105,11 @@ class FakeMemoryService:
         return [self.memory]
 
     def get_memory(self, id):
-        if id != self.memory.id:
-            raise MemoryNotFoundError("not found")
-        return self.memory
+        if id == self.memory.id:
+            return self.memory
+        if id == self.decision_memory.id:
+            return self.decision_memory
+        raise MemoryNotFoundError("not found")
 
     def update_decision_outcome(
         self,
@@ -113,6 +136,14 @@ class FakeMemoryService:
         self.decision_memory.outcome_timestamp = self.updated_outcome_timestamp
         self.decision_memory.outcome_evaluation = outcome_evaluation
         return self.decision_memory
+
+    def get_decision_evaluation_summary(self) -> dict:
+        self.evaluation_call_count += 1
+        return self.evaluation_summary
+
+    def get_intervention_warning_for_memory(self, memory: Memory) -> dict:
+        self.intervention_memory = memory
+        return self.intervention_warning
 
 
 class FailingMemoryService(FakeMemoryService):
@@ -221,6 +252,130 @@ def test_search_memories_returns_results():
     assert service.search_limit == 3
 
 
+def test_get_decision_evaluation_returns_empty_summary():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get("/memories/decisions/evaluation")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accuracy": {
+            "total_evaluated": 0,
+            "correct_count": 0,
+            "incorrect_count": 0,
+            "uncertain_count": 0,
+            "accuracy_rate": None,
+            "incorrect_rate": None,
+            "uncertain_rate": None,
+            "trend": "insufficient_data",
+        },
+        "failure_loops": [],
+    }
+    assert service.evaluation_call_count == 1
+
+
+def test_get_decision_evaluation_returns_accuracy_summary():
+    app = create_app()
+    service = FakeMemoryService()
+    service.evaluation_summary = {
+        "accuracy": {
+            "total_evaluated": 3,
+            "correct_count": 1,
+            "incorrect_count": 1,
+            "uncertain_count": 1,
+            "accuracy_rate": 0.5,
+            "incorrect_rate": 0.5,
+            "uncertain_rate": 1 / 3,
+            "trend": "insufficient_data",
+        },
+        "repeated_incorrect_patterns": [],
+    }
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get("/memories/decisions/evaluation")
+
+    assert response.status_code == 200
+    assert response.json()["accuracy"] == {
+        "total_evaluated": 3,
+        "correct_count": 1,
+        "incorrect_count": 1,
+        "uncertain_count": 1,
+        "accuracy_rate": 0.5,
+        "incorrect_rate": 0.5,
+        "uncertain_rate": 1 / 3,
+        "trend": "insufficient_data",
+    }
+
+
+def test_get_decision_evaluation_returns_failure_loops():
+    app = create_app()
+    service = FakeMemoryService()
+    service.evaluation_summary = {
+        "accuracy": {
+            "total_evaluated": 2,
+            "correct_count": 0,
+            "incorrect_count": 2,
+            "uncertain_count": 0,
+            "accuracy_rate": 0.0,
+            "incorrect_rate": 1.0,
+            "uncertain_rate": 0.0,
+            "trend": "insufficient_data",
+        },
+        "repeated_incorrect_patterns": [
+            {
+                "pattern_key": "tag:launch",
+                "incorrect_count": 2,
+                "decision_ids": ["decision-1", "decision-2"],
+                "latest_outcome_timestamp": datetime(
+                    2026,
+                    5,
+                    19,
+                    12,
+                    0,
+                    tzinfo=timezone.utc,
+                ),
+                "reason": "Repeated incorrect decisions share this grouping key",
+            }
+        ],
+    }
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get("/memories/decisions/evaluation")
+
+    assert response.status_code == 200
+    assert response.json()["failure_loops"] == [
+        {
+            "pattern_key": "tag:launch",
+            "incorrect_count": 2,
+            "decision_ids": ["decision-1", "decision-2"],
+            "latest_outcome_timestamp": "2026-05-19T12:00:00Z",
+            "reason": "Repeated incorrect decisions share this grouping key",
+        }
+    ]
+
+
+def test_get_decision_evaluation_does_not_mutate_memories():
+    app = create_app()
+    service = FakeMemoryService()
+    original_decision_data = dict(service.decision_memory.decision_data)
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get("/memories/decisions/evaluation")
+
+    assert response.status_code == 200
+    assert service.decision_memory.decision_data == original_decision_data
+
+
 def test_patch_decision_outcome_updates_existing_decision():
     app = create_app()
     service = FakeMemoryService()
@@ -314,6 +469,111 @@ def test_patch_decision_outcome_rejects_invalid_evaluation():
 
     assert response.status_code == 422
     assert service.update_count == 0
+
+
+def test_get_memory_intervention_returns_no_warning():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get(
+        f"/memories/{service.decision_memory.id}/intervention",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "warning": False,
+        "risk_level": "none",
+        "reason": "No repeated negative decision pattern matched",
+        "reference_pattern": None,
+    }
+    assert service.intervention_memory is service.decision_memory
+
+
+def test_get_memory_intervention_returns_warning():
+    app = create_app()
+    service = FakeMemoryService()
+    service.intervention_warning = {
+        "warning": True,
+        "risk_level": "high",
+        "reason": "This matches 2 past decision outcomes marked incorrect.",
+        "reference_pattern": {
+            "pattern_key": "tag:launch",
+            "incorrect_count": 2,
+            "decision_ids": ["decision-1", "decision-2"],
+            "latest_outcome_timestamp": "2026-05-19T12:00:00+00:00",
+        },
+    }
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get(
+        f"/memories/{service.decision_memory.id}/intervention",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == service.intervention_warning
+
+
+def test_get_memory_intervention_returns_404_for_missing_memory():
+    app = create_app()
+    service = FakeMemoryService()
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get(f"/memories/{uuid4()}/intervention")
+
+    assert response.status_code == 404
+
+
+def test_get_memory_intervention_returns_no_warning_for_non_decision_memory():
+    app = create_app()
+    service = FakeMemoryService()
+    service.intervention_warning = {
+        "warning": True,
+        "risk_level": "high",
+        "reason": "This should not be returned for non-decision memories.",
+        "reference_pattern": {
+            "pattern_key": "tag:memory",
+            "incorrect_count": 2,
+            "decision_ids": ["decision-1", "decision-2"],
+            "latest_outcome_timestamp": None,
+        },
+    }
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get(f"/memories/{service.memory.id}/intervention")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "warning": False,
+        "risk_level": "none",
+        "reason": "No repeated negative decision pattern matched",
+        "reference_pattern": None,
+    }
+    assert service.intervention_memory is None
+
+
+def test_get_memory_intervention_does_not_mutate_memories():
+    app = create_app()
+    service = FakeMemoryService()
+    original_decision_data = dict(service.decision_memory.decision_data)
+    app.dependency_overrides[get_memory_service] = lambda: service
+
+    from fastapi.testclient import TestClient
+
+    response = TestClient(app).get(
+        f"/memories/{service.decision_memory.id}/intervention",
+    )
+
+    assert response.status_code == 200
+    assert service.decision_memory.decision_data == original_decision_data
 
 
 def test_post_daily_compression_returns_compression_response():

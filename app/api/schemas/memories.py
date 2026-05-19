@@ -47,6 +47,44 @@ class DecisionOutcomeRequest(BaseModel):
     outcome_evaluation: Literal["correct", "incorrect", "uncertain"] | None = None
 
 
+class DecisionAccuracyResponse(BaseModel):
+    total_evaluated: int
+    correct_count: int
+    incorrect_count: int
+    uncertain_count: int
+    accuracy_rate: float | None
+    incorrect_rate: float | None
+    uncertain_rate: float | None
+    trend: Literal["insufficient_data", "improving", "declining", "stable"]
+
+
+class DecisionFailureLoopResponse(BaseModel):
+    pattern_key: str
+    incorrect_count: int
+    decision_ids: list[str]
+    latest_outcome_timestamp: datetime | None
+    reason: str
+
+
+class DecisionEvaluationSummaryResponse(BaseModel):
+    accuracy: DecisionAccuracyResponse
+    failure_loops: list[DecisionFailureLoopResponse]
+
+
+class InterventionReferencePatternResponse(BaseModel):
+    pattern_key: str
+    incorrect_count: int
+    decision_ids: list[str]
+    latest_outcome_timestamp: str | None
+
+
+class InterventionWarningResponse(BaseModel):
+    warning: bool
+    risk_level: str
+    reason: str
+    reference_pattern: InterventionReferencePatternResponse | None
+
+
 class DailyCompressionRequest(BaseModel):
     day: date
 
