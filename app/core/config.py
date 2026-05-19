@@ -35,6 +35,7 @@ class Settings:
     embedding_provider: str | None = None
     llm_provider: str | None = None
     openai_api_key: str | None = None
+    enable_openai_reflections: bool = False
 
 
 @lru_cache
@@ -50,4 +51,8 @@ def get_settings() -> Settings:
         embedding_provider=os.getenv("EMBEDDING_PROVIDER"),
         llm_provider=os.getenv("LLM_PROVIDER"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
+        enable_openai_reflections=_get_bool(
+            "ENABLE_OPENAI_REFLECTIONS",
+            Settings.enable_openai_reflections,
+        ),
     )

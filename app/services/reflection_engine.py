@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import json
 import re
 
+from app.core.config import get_settings
 from app.infrastructure.llm_client import generate_completion
 from app.models.memory import Memory
 
@@ -16,6 +17,26 @@ MAX_SUMMARY_MEMORIES = 3
 MAX_THEMES = 5
 MAX_INSIGHTS = 5
 RESPONSE_KEYS = ("summary", "themes", "insights", "questions")
+UNSAFE_AI_OUTPUT_TERMS = (
+    "personality",
+    "trait",
+    "character",
+    "feels",
+    "felt",
+    "anxious",
+    "sad",
+    "angry",
+    "stressed",
+    "burnout",
+    "caused",
+    "because",
+    "therefore",
+    "proves",
+    "should",
+    "must",
+    "need to",
+    "have to",
+)
 
 
 def _memory_summary(memory: Memory) -> str:
@@ -237,6 +258,11 @@ def _has_grounding(value: str, terms: set[str]) -> bool:
     return any(term in lowered for term in terms)
 
 
+def _is_safe_ai_output(value: str) -> bool:
+    lowered = value.lower()
+    return not any(term in lowered for term in UNSAFE_AI_OUTPUT_TERMS)
+
+
 def _validate_ai_reflection(
     candidate: object,
     deterministic: dict,
@@ -260,12 +286,12 @@ def _validate_ai_reflection(
     insights = [
         insight
         for insight in candidate["insights"]
-        if _has_grounding(insight, grounding_terms)
+        if _has_grounding(insight, grounding_terms) and _is_safe_ai_output(insight)
     ]
     questions = [
         question
         for question in candidate["questions"]
-        if _has_grounding(question, grounding_terms)
+        if _has_grounding(question, grounding_terms) and _is_safe_ai_output(question)
     ]
 
     return {
@@ -278,6 +304,9 @@ def _validate_ai_reflection(
 
 def generate_reflection_with_ai(memories: list[Memory]) -> dict:
     deterministic = generate_reflection(memories)
+    if not get_settings().enable_openai_reflections:
+        return deterministic
+
     prompt = _build_ai_prompt(memories, deterministic)
 
     try:

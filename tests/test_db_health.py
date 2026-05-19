@@ -66,3 +66,21 @@ def test_openai_api_key_loads_from_environment(monkeypatch):
     assert get_settings().openai_api_key == "test-key"
 
     get_settings.cache_clear()
+
+
+def test_enable_openai_reflections_defaults_false(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.delenv("ENABLE_OPENAI_REFLECTIONS", raising=False)
+
+    assert get_settings().enable_openai_reflections is False
+
+    get_settings.cache_clear()
+
+
+def test_enable_openai_reflections_loads_from_environment(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("ENABLE_OPENAI_REFLECTIONS", "true")
+
+    assert get_settings().enable_openai_reflections is True
+
+    get_settings.cache_clear()
