@@ -237,11 +237,26 @@ def test_reflection_output_schema_is_unchanged():
         build_memory("Reviewed database schema decisions.", ["database"]),
     ])
 
-    assert set(reflection) == {"summary", "themes", "insights", "questions"}
+    assert set(reflection) == {
+        "summary",
+        "themes",
+        "insights",
+        "questions",
+        "dominant_patterns",
+        "belief_statements",
+        "detected_loops",
+        "detected_tensions",
+        "grounded_questions",
+    }
     assert isinstance(reflection["summary"], str)
     assert isinstance(reflection["themes"], list)
     assert isinstance(reflection["insights"], list)
     assert isinstance(reflection["questions"], list)
+    assert isinstance(reflection["dominant_patterns"], list)
+    assert isinstance(reflection["belief_statements"], list)
+    assert isinstance(reflection["detected_loops"], list)
+    assert isinstance(reflection["detected_tensions"], list)
+    assert isinstance(reflection["grounded_questions"], list)
 
 
 def test_no_memories_returns_grounded_empty_reflection():
@@ -252,6 +267,11 @@ def test_no_memories_returns_grounded_empty_reflection():
         "themes": [],
         "insights": [],
         "questions": ["Which memories should be retrieved before reflecting?"],
+        "dominant_patterns": [],
+        "belief_statements": [],
+        "detected_loops": [],
+        "detected_tensions": [],
+        "grounded_questions": [],
     }
 
 def test_low_signal_theme_terms_are_filtered():
@@ -312,6 +332,11 @@ def test_debug_test_memories_without_repeated_useful_theme_return_cautious_refle
         "themes": [],
         "insights": [],
         "questions": ["Which more substantive memories should be retrieved before reflecting?"],
+        "dominant_patterns": [],
+        "belief_statements": [],
+        "detected_loops": [],
+        "detected_tensions": [],
+        "grounded_questions": [],
     }
 
 def test_debug_test_memory_detection_handles_punctuation():

@@ -76,7 +76,17 @@ def test_ai_reflection_uses_mocked_openai_response(monkeypatch):
 
     reflection = generate_reflection_with_ai(memories)
 
-    assert set(reflection) == {"summary", "themes", "insights", "questions"}
+    assert set(reflection) == {
+        "summary",
+        "themes",
+        "insights",
+        "questions",
+        "dominant_patterns",
+        "belief_statements",
+        "detected_loops",
+        "detected_tensions",
+        "grounded_questions",
+    }
     assert reflection["summary"] == generate_reflection(memories)["summary"]
     assert reflection["themes"] == ["database", "schema"]
     assert reflection["insights"] == ["database appears across the retrieved memories."]

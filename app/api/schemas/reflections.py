@@ -26,3 +26,8 @@ class ReflectionResponse(BaseModel):
     themes: list[str]
     insights: list[str]
     questions: list[str]
+    dominant_patterns: list[dict] = Field(default_factory=list)
+    belief_statements: list[dict] = Field(default_factory=list)
+    detected_loops: list[dict] = Field(default_factory=list)
+    detected_tensions: list[dict] = Field(default_factory=list)
+    grounded_questions: list[str] = Field(default_factory=list)

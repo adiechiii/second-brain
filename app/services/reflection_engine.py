@@ -12,6 +12,10 @@ import re
 from app.core.config import get_settings
 from app.infrastructure.llm_client import generate_completion
 from app.models.memory import Memory
+from app.services.behavior_loops import detect_behavior_loops
+from app.services.belief_consolidation import convert_patterns_to_beliefs
+from app.services.decision_patterns import detect_decision_patterns
+from app.services.tension_detection import detect_tensions
 
 MAX_SUMMARY_MEMORIES = 3
 MAX_THEMES = 5
@@ -43,6 +47,12 @@ UNSAFE_AI_OUTPUT_TERMS = (
 
 def _memory_summary(memory: Memory) -> str:
     return (memory.summary or memory.clean_text or "").strip()
+
+
+def _safe_text(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
 
 
 def _normalized_summary_text(text: str) -> str:
@@ -276,14 +286,89 @@ def _build_questions(themes: list[str], memories: list[Memory]) -> list[str]:
     return questions
 
 
+def build_grounded_questions(
+    patterns: list[dict],
+    beliefs: list[dict],
+    loops: list[dict],
+    tensions: list[dict],
+    limit: int = 5,
+) -> list[str]:
+    if limit < 1:
+        return []
+
+    questions: list[str] = []
+    seen: set[str] = set()
+
+    def add(question: str) -> None:
+        if len(questions) >= limit:
+            return
+        if question in seen:
+            return
+        seen.add(question)
+        questions.append(question)
+
+    for tension in tensions:
+        if not isinstance(tension, dict):
+            continue
+        label = _safe_text(tension.get("label"))
+        if label is not None:
+            add(f"Where is this tension showing up in your current decisions: {label}")
+
+    for loop in loops:
+        if not isinstance(loop, dict):
+            continue
+        label = _safe_text(loop.get("label"))
+        if label is not None:
+            add(f"What would help you interrupt this loop: {label}")
+
+    for belief in beliefs:
+        if not isinstance(belief, dict):
+            continue
+        statement = _safe_text(belief.get("statement"))
+        if statement is not None:
+            add(f"What evidence would strengthen or challenge this belief: {statement}")
+
+    for pattern in patterns:
+        if not isinstance(pattern, dict):
+            continue
+        label = _safe_text(pattern.get("label"))
+        if label is not None:
+            add(f"What small decision could test this pattern: {label}")
+
+    return questions
+
+
+def _cognitive_leverage_payload(memories: list[Memory]) -> dict:
+    dominant_patterns = detect_decision_patterns(memories)
+    belief_statements = convert_patterns_to_beliefs(dominant_patterns)
+    detected_loops = detect_behavior_loops(memories)
+    detected_tensions = detect_tensions(dominant_patterns, detected_loops)
+    grounded_questions = build_grounded_questions(
+        patterns=dominant_patterns,
+        beliefs=belief_statements,
+        loops=detected_loops,
+        tensions=detected_tensions,
+    )
+
+    return {
+        "dominant_patterns": dominant_patterns,
+        "belief_statements": belief_statements,
+        "detected_loops": detected_loops,
+        "detected_tensions": detected_tensions,
+        "grounded_questions": grounded_questions,
+    }
+
+
 def generate_reflection(memories: list[Memory]) -> dict:
     if not memories:
-        return {
+        reflection = {
             "summary": "No retrieved memories were provided, so there is not enough evidence for a reflection.",
             "themes": [],
             "insights": [],
             "questions": ["Which memories should be retrieved before reflecting?"],
         }
+        reflection.update(_cognitive_leverage_payload(memories))
+        return reflection
 
     theme_counts = _theme_counts(memories)
     has_repeated_useful_theme = any(count > 1 for count in theme_counts.values())
@@ -291,12 +376,14 @@ def generate_reflection(memories: list[Memory]) -> dict:
         _has_low_signal_memory_marker(memory) for memory in memories
     )
     if all_memories_are_debug_notes and not has_repeated_useful_theme:
-        return {
+        reflection = {
             "summary": "Retrieved memories are mostly low-signal notes, so there is not enough meaningful evidence for a useful reflection.",
             "themes": [],
             "insights": [],
             "questions": ["Which more substantive memories should be retrieved before reflecting?"],
         }
+        reflection.update(_cognitive_leverage_payload(memories))
+        return reflection
 
     themes = _top_themes(memories)
     summaries = _top_summaries(memories, themes)
@@ -316,12 +403,14 @@ def generate_reflection(memories: list[Memory]) -> dict:
         else:
             summary = "Retrieved memories did not include summaries to combine."
 
-    return {
+    reflection = {
         "summary": summary,
         "themes": themes,
         "insights": insights,
         "questions": questions,
     }
+    reflection.update(_cognitive_leverage_payload(memories))
+    return reflection
 
 
 def _reflection_depth_instruction(depth: str) -> str:
@@ -436,12 +525,22 @@ def _validate_ai_reflection(
         if _has_grounding(question, grounding_terms) and _is_safe_ai_output(question)
     ]
 
-    return {
+    reflection = {
         "summary": deterministic["summary"],
         "themes": themes or deterministic["themes"],
         "insights": insights or deterministic["insights"],
         "questions": questions or deterministic["questions"],
     }
+    reflection.update(
+        {
+            "dominant_patterns": deterministic.get("dominant_patterns", []),
+            "belief_statements": deterministic.get("belief_statements", []),
+            "detected_loops": deterministic.get("detected_loops", []),
+            "detected_tensions": deterministic.get("detected_tensions", []),
+            "grounded_questions": deterministic.get("grounded_questions", []),
+        }
+    )
+    return reflection
 
 
 def generate_reflection_with_ai(

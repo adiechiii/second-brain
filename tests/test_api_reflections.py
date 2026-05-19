@@ -17,6 +17,11 @@ class FakeReflectionService:
             "themes": ["database"],
             "insights": ["'database' appears in 2 retrieved memories."],
             "questions": ["What database decision needs review?"],
+            "dominant_patterns": [],
+            "belief_statements": [],
+            "detected_loops": [],
+            "detected_tensions": [],
+            "grounded_questions": [],
         }
 
     def generate_from_query(
