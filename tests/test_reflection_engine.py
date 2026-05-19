@@ -290,3 +290,26 @@ def test_debug_test_memories_are_not_high_signal():
     ]
 
     assert all(not _is_high_signal_memory(memory) for memory in memories)
+
+def test_debug_test_memories_without_repeated_useful_theme_return_cautious_reflection():
+    memories = [
+        build_memory(
+            "Second Brain debug error test after deploy.",
+            ["deploy"],
+            topic="debug",
+        ),
+        build_memory(
+            "Second Brain fake OpenAI key test.",
+            ["openai"],
+            topic="test",
+        ),
+    ]
+
+    reflection = generate_reflection(memories)
+
+    assert reflection == {
+        "summary": "Retrieved memories are mostly low-signal notes, so there is not enough meaningful evidence for a useful reflection.",
+        "themes": [],
+        "insights": [],
+        "questions": ["Which more substantive memories should be retrieved before reflecting?"],
+    }

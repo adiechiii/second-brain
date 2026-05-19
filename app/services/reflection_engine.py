@@ -101,6 +101,11 @@ def _is_useful_theme(theme: str) -> bool:
     return normalized not in LOW_SIGNAL_THEME_TERMS
 
 
+def _has_low_signal_memory_marker(memory: Memory) -> bool:
+    normalized = _normalized_summary_text(_memory_summary(memory))
+    return any(marker in normalized for marker in LOW_SIGNAL_MEMORY_MARKERS)
+
+
 def _is_high_signal_memory(memory: Memory) -> bool:
     summary = _memory_summary(memory)
     normalized = _normalized_summary_text(summary)
@@ -108,7 +113,7 @@ def _is_high_signal_memory(memory: Memory) -> bool:
         return False
     if normalized in LOW_SIGNAL_MEMORY_TEXTS:
         return False
-    return not any(marker in normalized for marker in LOW_SIGNAL_MEMORY_MARKERS)
+    return not _has_low_signal_memory_marker(memory)
 
 
 def _normalized_tags(memory: Memory) -> list[str]:
@@ -261,6 +266,19 @@ def generate_reflection(memories: list[Memory]) -> dict:
             "themes": [],
             "insights": [],
             "questions": ["Which memories should be retrieved before reflecting?"],
+        }
+
+    theme_counts = _theme_counts(memories)
+    has_repeated_useful_theme = any(count > 1 for count in theme_counts.values())
+    all_memories_are_debug_notes = all(
+        _has_low_signal_memory_marker(memory) for memory in memories
+    )
+    if all_memories_are_debug_notes and not has_repeated_useful_theme:
+        return {
+            "summary": "Retrieved memories are mostly low-signal notes, so there is not enough meaningful evidence for a useful reflection.",
+            "themes": [],
+            "insights": [],
+            "questions": ["Which more substantive memories should be retrieved before reflecting?"],
         }
 
     themes = _top_themes(memories)
