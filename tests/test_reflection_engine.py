@@ -57,8 +57,8 @@ def test_multiple_memories_extract_themes():
         "planning",
         "schema",
     ]
-    assert "'architecture' is supported by 2 retrieved memories." in reflection["insights"]
-    assert "'database' is supported by 2 retrieved memories." in reflection["insights"]
+    assert "A recurring signal around 'architecture' appears across 2 retrieved memories." in reflection["insights"]
+    assert "A recurring signal around 'database' appears across 2 retrieved memories." in reflection["insights"]
     assert reflection["questions"] == [
         "What decision, action, or open question keeps recurring around 'architecture'?",
         "What decision, action, or open question keeps recurring around 'database'?",
@@ -188,7 +188,7 @@ def test_topic_only_memories_produce_themes():
 
     assert reflection["themes"] == ["architecture"]
     assert reflection["insights"] == [
-        "'architecture' is supported by 2 retrieved memories."
+        "A recurring signal around 'architecture' appears across 2 retrieved memories."
     ]
 
 
@@ -202,8 +202,8 @@ def test_tags_and_topics_both_contribute_to_theme_counts():
     reflection = generate_reflection(memories)
 
     assert reflection["themes"][:2] == ["architecture", "database"]
-    assert "'architecture' is supported by 2 retrieved memories." in reflection["insights"]
-    assert "'database' is supported by 2 retrieved memories." in reflection["insights"]
+    assert "A recurring signal around 'architecture' appears across 2 retrieved memories." in reflection["insights"]
+    assert "A recurring signal around 'database' appears across 2 retrieved memories." in reflection["insights"]
 
 
 def test_insights_include_evidence_counts_for_single_theme_leads():
@@ -229,7 +229,7 @@ def test_empty_or_non_string_tags_and_topics_are_ignored():
     reflection = generate_reflection(memories)
 
     assert reflection["themes"] == ["database"]
-    assert reflection["insights"] == ["'database' is supported by 2 retrieved memories."]
+    assert reflection["insights"] == ["A recurring signal around 'database' appears across 2 retrieved memories."]
 
 
 def test_reflection_output_schema_is_unchanged():

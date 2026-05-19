@@ -186,7 +186,9 @@ def _build_insights(memories: list[Memory], themes: list[str]) -> list[str]:
     for theme in themes:
         count = _evidence_count(theme, memories)
         if count > 1:
-            insights.append(f"'{theme}' is supported by {count} retrieved memories.")
+            insights.append(
+                f"A recurring signal around '{theme}' appears across {count} retrieved memories."
+            )
         elif count == 1:
             insights.append(
                 f"'{theme}' appears in one retrieved memory, so treat it as a lead rather than a pattern."
