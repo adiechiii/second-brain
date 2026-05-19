@@ -313,3 +313,12 @@ def test_debug_test_memories_without_repeated_useful_theme_return_cautious_refle
         "insights": [],
         "questions": ["Which more substantive memories should be retrieved before reflecting?"],
     }
+
+def test_debug_test_memory_detection_handles_punctuation():
+    memory = build_memory(
+        "Second Brain: final production stabilization smoke test.",
+        ["final"],
+        topic="production",
+    )
+
+    assert not _is_high_signal_memory(memory)

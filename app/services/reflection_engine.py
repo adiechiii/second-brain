@@ -93,6 +93,13 @@ LOW_SIGNAL_MEMORY_MARKERS = (
     "test after deploy",
 )
 
+LOW_SIGNAL_MEMORY_TOKEN_GROUPS = (
+    {"debug", "test"},
+    {"fake", "openai", "key"},
+    {"local", "traceback"},
+    {"smoke", "test"},
+)
+
 
 def _is_useful_theme(theme: str) -> bool:
     normalized = theme.strip().lower()
@@ -103,7 +110,10 @@ def _is_useful_theme(theme: str) -> bool:
 
 def _has_low_signal_memory_marker(memory: Memory) -> bool:
     normalized = _normalized_summary_text(_memory_summary(memory))
-    return any(marker in normalized for marker in LOW_SIGNAL_MEMORY_MARKERS)
+    if any(marker in normalized for marker in LOW_SIGNAL_MEMORY_MARKERS):
+        return True
+    tokens = set(re.findall(r"[a-z0-9]+", normalized))
+    return any(group <= tokens for group in LOW_SIGNAL_MEMORY_TOKEN_GROUPS)
 
 
 def _is_high_signal_memory(memory: Memory) -> bool:
